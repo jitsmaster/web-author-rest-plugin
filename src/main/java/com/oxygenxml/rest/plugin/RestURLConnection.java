@@ -326,7 +326,9 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 
 			tokenCon.getOutputStream().write(sb.toString().getBytes("UTF-8"));
 
-			return getResponseObject(tokenCon, AccessTokenResponse.class);
+			AccessTokenResponse token = getResponseObject(tokenCon, AccessTokenResponse.class);
+			token.issueTime = LocalDateTime.now();
+			return token;
 		} catch (Exception e) {
 			return null;
 		}
@@ -358,7 +360,10 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 
 			tokenCon.getOutputStream().write(sb.toString().getBytes("UTF-8"));
 
-			return getResponseObject(tokenCon, AccessTokenResponse.class);
+			AccessTokenResponse token = getResponseObject(tokenCon, AccessTokenResponse.class);
+			token.issueTime = LocalDateTime.now();
+
+			return token;
 		} catch (Exception e) {
 			return null;
 		}
