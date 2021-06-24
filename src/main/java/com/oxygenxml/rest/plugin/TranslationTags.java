@@ -4,20 +4,26 @@ public interface TranslationTags {
 
   /**
    * The server URL translation tag.
-   *  
+   * 
    * en: Server URL
    */
   String SERVER_URL = "Server_URL";
-  
+
+  String CLIENT_ID = "Client_ID";
+
+  String CLIENT_SECRET = "Client_Sec";
+
   /**
-   * Label for text input for setting the regular expression that determines the root directory.
+   * Label for text input for setting the regular expression that determines the
+   * root directory.
    * 
    * en: Root RegExp
    */
   String ROOT_REGEXP = "Root_regexp";
-  
+
   /**
-   * Tooltip explaining that the input value required is a regular expression which will determine the root directory.
+   * Tooltip explaining that the input value required is a regular expression
+   * which will determine the root directory.
    * 
    * en: Regular expression applied over the URL to determine the RootURL.
    */
@@ -50,9 +56,10 @@ public interface TranslationTags {
    * en: File not found
    */
   String FILE_NOT_FOUND = "File_not_found";
-  
+
   /**
-   * The label of the checkbox that configures whether the plugin users the invisible login mechanism.
+   * The label of the checkbox that configures whether the plugin users the
+   * invisible login mechanism.
    * 
    * en: Use invisible login form.
    */

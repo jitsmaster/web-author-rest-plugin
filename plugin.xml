@@ -5,9 +5,9 @@
 <plugin
     class="ro.sync.exml.plugin.Plugin"
 
-    id="web-author-rest-connector"
-    name="REST Connector"
-    description="oXygen XML Web Author connector for a generic REST API"
+    id="web-author-rest-connector-oauth"
+    name="REST Connector - Ingeniux OAuth"
+    description="oXygen XML Web Author connector for a generic REST API - Ingeniux OAuth"
     version="${project.nosnapshot.version}"
     vendor="Syncro Soft SRL">
 

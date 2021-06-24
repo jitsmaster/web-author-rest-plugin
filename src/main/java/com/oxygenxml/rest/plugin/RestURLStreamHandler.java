@@ -23,8 +23,8 @@ import ro.sync.basic.util.URLUtil;
  * 
  * @author mihai_coanda
  */
-public class RestURLStreamHandler  extends URLStreamHandlerWithContext {
-    /**
+public class RestURLStreamHandler extends URLStreamHandlerWithContext {
+  /**
    * Logger.
    */
   private static final Logger logger = Logger.getLogger(RestURLStreamHandler.class.getName());
@@ -33,7 +33,8 @@ public class RestURLStreamHandler  extends URLStreamHandlerWithContext {
    * The environment variable used by the REST plugin to determine the server URL.
    */
   private static final String REST_SERVER_URL_ENV_VAR = "REST_SERVER_URL";
-
+  private static final String REST_CLIENT_ID_ENV_VAR = "REST_CLIENT_ID";
+  private static final String REST_CLIENT_SECRET_ENV_VAR = "REST_CLIENT_SECRET";
 
   /**
    * Constructor.
@@ -44,8 +45,8 @@ public class RestURLStreamHandler  extends URLStreamHandlerWithContext {
       WSOptionsStorage optionsStorage = PluginWorkspaceProvider.getPluginWorkspace().getOptionsStorage();
       String serverUrl = optionsStorage.getOption(RestConfigExtension.REST_SERVER_URL, null);
       if (serverUrl != null && !restServerUrlEnvVar.equals(serverUrl)) {
-        logger.warn("The \"REST Server URL\" option is overriden by the "
-            + "\"" + RestConfigExtension.REST_SERVER_URL + "\" environment variable.");
+        logger.warn("The \"REST Server URL\" option is overriden by the " + "\"" + RestConfigExtension.REST_SERVER_URL
+            + "\" environment variable.");
       }
     }
   }
@@ -53,13 +54,13 @@ public class RestURLStreamHandler  extends URLStreamHandlerWithContext {
   @Override
   protected String getContextId(UserContext context) {
     String contextId = super.getContextId(context);
-    
+
     StringBuilder cookies = new StringBuilder();
-    for (Map.Entry<String, String> cookie: context.getCookies().entrySet()) {
+    for (Map.Entry<String, String> cookie : context.getCookies().entrySet()) {
       cookies.append(cookie.getKey()).append('=').append(cookie.getValue()).append("; ");
     }
-    Map<String, String> headersMap = Collections.singletonMap("Cookie", cookies.toString()); 
-    
+    Map<String, String> headersMap = Collections.singletonMap("Cookie", cookies.toString());
+
     RestURLConnection.credentialsMap.put(contextId, headersMap);
     return contextId;
   }
@@ -70,10 +71,10 @@ public class RestURLStreamHandler  extends URLStreamHandlerWithContext {
     URLConnection urlConnection = computeRestUrl(url).openConnection();
     return new RestURLConnection(contextId, urlConnection);
   }
-  
+
   /**
    * Computes the new URL to the REST server from the current connection.
-   *  
+   * 
    * @param url the current URL.
    * 
    * @return the URL to the REST server that represents the current URL.
@@ -83,14 +84,15 @@ public class RestURLStreamHandler  extends URLStreamHandlerWithContext {
   private static URL computeRestUrl(URL url) throws MalformedURLException {
     String encodedDocumentURL = URLUtil.encodeURIComponent(url.toExternalForm());
     String serverUrl = getServerUrl();
-    if(serverUrl != null && !serverUrl.isEmpty()) {
+    if (serverUrl != null && !serverUrl.isEmpty()) {
       String restUrl = serverUrl + "files?url=" + encodedDocumentURL;
       return new URL(restUrl);
     }
-    PluginResourceBundle rb = ((WebappPluginWorkspace)PluginWorkspaceProvider.getPluginWorkspace()).getResourceBundle();
+    PluginResourceBundle rb = ((WebappPluginWorkspace) PluginWorkspaceProvider.getPluginWorkspace())
+        .getResourceBundle();
     throw new MalformedURLException(rb.getMessage(TranslationTags.UNCONFIGURED_REST_SERVER_URL));
   }
-  
+
   /**
    * Getter for the server's base rest url.
    * 
@@ -105,12 +107,38 @@ public class RestURLStreamHandler  extends URLStreamHandlerWithContext {
       WSOptionsStorage optionsStorage = PluginWorkspaceProvider.getPluginWorkspace().getOptionsStorage();
       serverUrl = optionsStorage.getOption(RestConfigExtension.REST_SERVER_URL, "");
     }
-    
+
     // if the server URL does not end in '/' we add the '/'
-    if(serverUrl != null && !serverUrl.isEmpty() && serverUrl.lastIndexOf('/') != serverUrl.length() - 1) {
+    if (serverUrl != null && !serverUrl.isEmpty() && serverUrl.lastIndexOf('/') != serverUrl.length() - 1) {
       serverUrl = serverUrl + "/";
     }
-    
+
     return serverUrl;
+  }
+
+  public static String getClientId() {
+    String restClientIdEnvVar = System.getenv(REST_CLIENT_ID_ENV_VAR);
+    String clientId;
+    if (restClientIdEnvVar != null) {
+      clientId = restClientIdEnvVar;
+    } else {
+      WSOptionsStorage optionsStorage = PluginWorkspaceProvider.getPluginWorkspace().getOptionsStorage();
+      clientId = optionsStorage.getOption(RestConfigExtension.REST_CLIENT_ID, "");
+    }
+
+    return clientId;
+  }
+
+  public static String getClientSecret() {
+    String restClientSecEnvVar = System.getenv(REST_CLIENT_SECRET_ENV_VAR);
+    String clientSec;
+    if (restClientSecEnvVar != null) {
+      clientSec = restClientSecEnvVar;
+    } else {
+      WSOptionsStorage optionsStorage = PluginWorkspaceProvider.getPluginWorkspace().getOptionsStorage();
+      clientSec = optionsStorage.getOption(RestConfigExtension.REST_CLIENT_SECRET, "");
+    }
+
+    return clientSec;
   }
 }

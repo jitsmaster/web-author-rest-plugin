@@ -79,4 +79,20 @@
         <val lang="ja_JP">サーバー URL</val>
         <val lang="nl_NL">Server URL</val>
     </key>
+    <key value="Client_ID">
+        
+        <val lang="en_US">Client ID</val>
+        <val lang="de_DE">Client ID</val>
+        <val lang="fr_FR">Client ID</val>
+        <val lang="ja_JP">Client ID</val>
+        <val lang="nl_NL">Client ID</val>
+    </key>	
+    <key value="Client_Sec">
+        
+        <val lang="en_US">Client Secret</val>
+        <val lang="de_DE">Client Secret</val>
+        <val lang="fr_FR">Client Secret</val>
+        <val lang="ja_JP">Client Secret</val>
+        <val lang="nl_NL">Client Secret</val>
+    </key>		
 </translation>
