@@ -7,6 +7,9 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.URLEncoder;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -32,6 +35,7 @@ import com.google.common.cache.CacheBuilder;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Closeables;
 import com.google.common.net.MediaType;
+import com.google.gson.Gson;
 
 import ro.sync.ecss.extensions.api.webapp.WebappMessage;
 import ro.sync.ecss.extensions.api.webapp.access.WebappPluginWorkspace;
@@ -61,6 +65,7 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 	 * Header set for all requests in order to allow CMS's to prevent CSRF requests.
 	 */
 	private static final String CSRF_HEADER = "X-Requested-With";
+	private static final String AUTH_HEADER = "authorization";
 
 	/**
 	 * Credentials store.
@@ -245,31 +250,12 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 	 */
 	public static void addHeaders(URLConnection urlConnection, String contextId) {
 
-		try {
-			URL serverUrl = new URL(RestURLStreamHandler.getServerUrl());
-
-			String path = serverUrl.getFile();
-			Integer index = path.indexOf("/automated/");
-			String oaCodePath = path.substring(0, index) + "/oauth/auth?response_type=code&client_id="
-					+ RestURLStreamHandler.getClientId() + "&redirect_uri=http://ingeniux.com/redir";
-
-			URL authCodeUrl = new URL(serverUrl.getProtocol(), serverUrl.getHost(), oaCodePath);
-
-			// now hit the oauth auth code url, it is get
-
-			HttpURLConnection codeCon = (HttpURLConnection) authCodeUrl.openConnection();
-			codeCon.setRequestMethod("GET");
-			codeCon.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-			codeCon.setRequestProperty("Accept", "application/json");
-			BufferedReader reader = new BufferedReader(new InputStreamReader(codeCon.getInputStream()));
-			String line = null;
-			StringWriter out = new StringWriter(codeCon.getContentLength() > 0 ? codeCon.getContentLength() : 2048);
-			while ((line = reader.readLine()) != null) {
-				out.append(line);
-			}
-			String response = out.toString();
-
-		} catch (Exception e) {
+		if (accessToken == null || accessToken.getRefreshTokenExpireTime().isBefore(LocalDateTime.now())) {
+			String authCode = getAuthorziationCode();
+			accessToken = getAccessToken((authCode));
+		} else if (accessToken.getAccessTokenExpireTime().isBefore(LocalDateTime.now())
+				&& accessToken.getRefreshTokenExpireTime().isAfter(LocalDateTime.now())) {
+			accessToken = getRefreshToken();
 		}
 
 		// PrintStream os = new PrintStream(codeCon.getOutputStream());
@@ -280,6 +266,14 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 		// An attacker can create a form to send a post requests to a rest end-point but
 		// won't be able to set this header.
 		urlConnection.addRequestProperty(CSRF_HEADER, "RC");
+
+		// set bearer token
+		try {
+			urlConnection.addRequestProperty(AUTH_HEADER,
+					"Bearer " + URLEncoder.encode(accessToken.access_token, "UTF-8"));
+		} catch (Exception e) {
+
+		}
 
 		if (contextId == null) {
 			// The current request did not match any session - no headers to add.
@@ -296,6 +290,118 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 				urlConnection.addRequestProperty(header, headerValue);
 			}
 		}
+	}
+
+	private static String getBaseUrl(URL serverUrl) {
+
+		String path = serverUrl.getFile();
+		Integer index = path.indexOf("/automated/");
+		return path.substring(0, index);
+	}
+
+	public static volatile AccessTokenResponse accessToken;
+
+	private static AccessTokenResponse getRefreshToken() {
+		try {
+			URL serverUrl = new URL(RestURLStreamHandler.getServerUrl());
+			String baseUrl = getBaseUrl(serverUrl);
+
+			String tokenPath = baseUrl + "/oauth/token";
+
+			URL tokenUrl = new URL(serverUrl.getProtocol(), serverUrl.getHost(), tokenPath);
+
+			// now hit the oauth auth code url, it is get
+
+			HttpURLConnection tokenCon = (HttpURLConnection) tokenUrl.openConnection();
+			tokenCon.setRequestMethod("POST");
+			tokenCon.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+			tokenCon.setRequestProperty("Accept", "application/json");
+			tokenCon.setDoOutput(true);
+
+			StringBuilder sb = new StringBuilder();
+			sb.append("grant_type=refresh_token");
+			sb.append("&client_id=" + URLEncoder.encode(RestURLStreamHandler.getClientId(), "UTF-8"));
+			sb.append("&client_secret=" + URLEncoder.encode(RestURLStreamHandler.getClientSecret(), "UTF-8"));
+			sb.append("&refresh_token=" + URLEncoder.encode(accessToken.refresh_token, "UTF-8"));
+
+			tokenCon.getOutputStream().write(sb.toString().getBytes("UTF-8"));
+
+			return getResponseObject(tokenCon, AccessTokenResponse.class);
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	private static AccessTokenResponse getAccessToken(String authorizationCode) {
+
+		try {
+			URL serverUrl = new URL(RestURLStreamHandler.getServerUrl());
+			String baseUrl = getBaseUrl(serverUrl);
+
+			String tokenPath = baseUrl + "/oauth/token";
+
+			URL tokenUrl = new URL(serverUrl.getProtocol(), serverUrl.getHost(), tokenPath);
+
+			// now hit the oauth auth code url, it is get
+
+			HttpURLConnection tokenCon = (HttpURLConnection) tokenUrl.openConnection();
+			tokenCon.setRequestMethod("POST");
+			tokenCon.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+			tokenCon.setRequestProperty("Accept", "application/json");
+			tokenCon.setDoOutput(true);
+
+			StringBuilder sb = new StringBuilder();
+			sb.append("grant_type=authorization_code");
+			sb.append("&client_id=" + URLEncoder.encode(RestURLStreamHandler.getClientId(), "UTF-8"));
+			sb.append("&client_secret=" + URLEncoder.encode(RestURLStreamHandler.getClientSecret(), "UTF-8"));
+			sb.append("&code=" + URLEncoder.encode(authorizationCode, "UTF-8"));
+
+			tokenCon.getOutputStream().write(sb.toString().getBytes("UTF-8"));
+
+			return getResponseObject(tokenCon, AccessTokenResponse.class);
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	private static String getAuthorziationCode() {
+		String authCode = "";
+		try {
+			URL serverUrl = new URL(RestURLStreamHandler.getServerUrl());
+			String baseUrl = getBaseUrl(serverUrl);
+
+			String oaCodeUrl = baseUrl + "/oauth/auth?response_type=code&client_id="
+					+ RestURLStreamHandler.getClientId() + "&redirect_uri=http://ingeniux.com/redir";
+
+			URL authCodeUrl = new URL(serverUrl.getProtocol(), serverUrl.getHost(), oaCodeUrl);
+
+			// now hit the oauth auth code url, it is get
+
+			HttpURLConnection codeCon = (HttpURLConnection) authCodeUrl.openConnection();
+			codeCon.setRequestMethod("GET");
+			codeCon.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+			codeCon.setRequestProperty("Accept", "application/json");
+			AuthorizationCodeResp codeResp = getResponseObject(codeCon, AuthorizationCodeResp.class);
+
+			authCode = codeResp.code;
+		} catch (Exception e) {
+		}
+
+		return authCode;
+	}
+
+	private static <T> T getResponseObject(HttpURLConnection codeCon, Class<T> classOfT) throws IOException {
+		BufferedReader reader = new BufferedReader(new InputStreamReader(codeCon.getInputStream()));
+		String line = null;
+		StringWriter out = new StringWriter(codeCon.getContentLength() > 0 ? codeCon.getContentLength() : 2048);
+		while ((line = reader.readLine()) != null) {
+			out.append(line);
+		}
+		String response = out.toString();
+
+		Gson g = new Gson();
+		T codeResp = g.fromJson(response, classOfT);
+		return codeResp;
 	}
 
 	@Override
