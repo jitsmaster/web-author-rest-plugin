@@ -376,7 +376,7 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 		String baseUrl = getBaseUrl(serverUrl);
 
 		String oaCodeUrl = baseUrl + "/oauth/auth?response_type=code&client_id=" + RestURLStreamHandler.getClientId()
-				+ "&redirect_uri=http://ingeniux.com/redir";
+				+ "&redirect_uri=urn:ietf:wg:oauth:2.0:oob";
 
 		URL authCodeUrl = new URL(serverUrl.getProtocol(), serverUrl.getHost(), oaCodeUrl);
 
