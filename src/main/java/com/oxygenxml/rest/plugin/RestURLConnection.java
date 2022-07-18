@@ -381,7 +381,6 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 		URL authCodeUrl = new URL(serverUrl.getProtocol(), serverUrl.getHost(), oaCodeUrl);
 
 		// now hit the oauth auth code url, it is get
-
 		HttpURLConnection codeCon = (HttpURLConnection) authCodeUrl.openConnection();
 		codeCon.setRequestMethod("GET");
 		codeCon.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");

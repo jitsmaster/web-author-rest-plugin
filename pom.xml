@@ -25,6 +25,41 @@
     <sonar.sources>src/main/java,web</sonar.sources>
   </properties>
 
+    <repositories>
+        <repository>
+            <id>public</id>
+            <name>oXygen public artifacts</name>
+            <url>https://www.oxygenxml.com/maven</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+        <repository>
+            <id>public2</id>
+            <name>Maven Repo</name>
+            <url>https://mvnrepository.com/artifact</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>   
+        <repository>
+            <id>Oxygen_D_Plugin</id>
+            <url>https://ingeniuxdev.pkgs.visualstudio.com/_packaging/Oxygen_D_Plugin/maven/v1</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>  
+
   <dependencies>
     <dependency>
       <groupId>com.oxygenxml</groupId>
