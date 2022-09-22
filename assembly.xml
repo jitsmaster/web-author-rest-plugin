@@ -31,7 +31,7 @@
         <include>**/*</include>
       </includes>
     </fileSet>
-    
+
     <fileSet>
       <directory>target/i18n</directory>
       <outputDirectory>i18n</outputDirectory>
@@ -40,7 +40,7 @@
       </includes>
     </fileSet>
   </fileSets>
-  
+
   <files>
     <file>
       <source>LICENSE</source>

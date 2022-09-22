@@ -3,11 +3,13 @@ package com.oxygenxml.rest.plugin;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
+import java.net.ProtocolException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLEncoder;
+import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -26,8 +28,6 @@ import org.apache.log4j.Logger;
 import org.codehaus.jackson.JsonNode;
 import org.codehaus.jackson.map.ObjectMapper;
 
-import jdk.nashorn.internal.ir.RuntimeNode.Request;
-
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Charsets;
 import com.google.common.cache.Cache;
@@ -44,6 +44,7 @@ import ro.sync.ecss.extensions.api.webapp.plugin.UserActionRequiredException;
 import ro.sync.exml.plugin.urlstreamhandler.CacheableUrlConnection;
 import ro.sync.exml.workspace.api.PluginResourceBundle;
 import ro.sync.exml.workspace.api.PluginWorkspaceProvider;
+import ro.sync.exml.workspace.api.options.WSOptionsStorage;
 import ro.sync.net.protocol.FolderEntryDescriptor;
 import ro.sync.net.protocol.http.HttpExceptionWithDetails;
 import ro.sync.basic.util.URLUtil;
@@ -51,7 +52,7 @@ import ro.sync.basic.util.URLUtil;
 /**
  * Wrapper over an URLConnection that reports 401 exceptions as
  * {@link UserActionRequiredException}.
- * 
+ *
  * @author mihai_coanda, arnold wang implmented OAuth
  */
 public class RestURLConnection extends FilterURLConnection implements CacheableUrlConnection {
@@ -75,7 +76,7 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 
 	/**
 	 * Prefix of the protocol.
-	 * 
+	 *
 	 * We translate http to rest-http and https to rest-https.
 	 */
 	public static final String REST_PROTOCOL = "rest";
@@ -92,16 +93,23 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 	private URL urlOverride;
 
 	/**
+	 * The base URL of the CMS.
+	 */
+	private String cmsBase;
+
+	/**
 	 * Constructor method for the URLConnection wrapper.
-	 * 
+	 *
 	 * @param contextId The session ID.
-	 * 
+	 *
 	 * @param delegate  the wrapped URLConnection.
 	 * @throws UserActionRequiredException if something fails.
 	 */
 	protected RestURLConnection(String contextId, URLConnection delegate) {
 		super(delegate);
 		this.contextId = contextId;
+
+		cmsBase = RestURLStreamHandler.getServerUrl();
 		addHeaders(this, this.contextId);
 	}
 
@@ -117,6 +125,10 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 	@Override
 	public InputStream getInputStream() throws IOException {
 		try {
+			InputStream dtdStream = getAssetBinaryInputStreamWithDtdCache();
+			if (dtdStream != null) {
+				return dtdStream;
+			}
 			return super.getInputStream();
 		} catch (IOException e) {
 			handleException(e);
@@ -124,6 +136,70 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 			// Unreachable.
 			return null;
 		}
+	}
+
+	private String getDtdEntContentPath(String name) {
+		return cmsBase + "GetDtdEntContent?path=" + name;
+	}
+
+	private InputStream getAssetBinaryInputStreamWithDtdCache() throws IOException {
+		String query = url.getQuery();
+
+		int index = query.lastIndexOf(".");
+		String ext = (index > -1 && index < query.length() - 1) ? query.substring(index + 1) : "";
+
+		String path = getFileUrl(url);
+		if (path.startsWith("rest://")) {
+			path = "/" + path.substring("rest://".length());
+		}
+		path = Paths.get(path).getFileName().toString();
+
+		boolean isDtd = ext.equalsIgnoreCase("dtd")
+				|| ext.equalsIgnoreCase("mod")
+				|| ext.equalsIgnoreCase("ent");
+
+		if (isDtd) {
+			InputStream strm = DtdCacher.get(this).getCache(path);
+
+			if (strm != null) {
+				return strm;
+			}
+
+			HttpURLConnection connection = (HttpURLConnection) new URL(getDtdEntContentPath(path))
+					.openConnection();
+			addHeaders(connection, contextId);
+
+			strm = connection.getInputStream();
+			try {
+				DtdCacher.get(this).putCache(path, strm);
+				return DtdCacher.get(this).getCache(path);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+
+		return null;
+	}
+
+	public DtdModelWithContent[] getDtdContents(String[] ids) throws MalformedURLException,
+			ProtocolException, IOException {
+		StringBuilder sb = new StringBuilder();
+		sb.append("ids=" + String.join("|", ids));
+
+		// now hit the oauth auth code url, it is get
+		URL dtdUrl = new URL(cmsBase + "automated/OxygenApi/GetDtdEntContent?" + sb.toString());
+		HttpURLConnection connection = (HttpURLConnection) dtdUrl.openConnection();
+		addHeaders(connection, contextId);
+
+		return getResponseObject(connection, DtdModelWithContent[].class);
+	}
+
+	public EnvironmentModel getEnvironment() throws MalformedURLException, ProtocolException, IOException {
+		URL environmentUrl = new URL(cmsBase + "/automated/OxygenApi/GetEnvironment");
+		HttpURLConnection connection = (HttpURLConnection) environmentUrl.openConnection();
+		addHeaders(connection, contextId);
+
+		return getResponseObject(connection, EnvironmentModel.class);
 	}
 
 	@Override
@@ -154,12 +230,12 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 
 	/**
 	 * Filters the exceptions.
-	 * 
+	 *
 	 * @param e the exception to filter.
-	 * 
+	 *
 	 * @throws UserActionRequiredException if the exception message contains a 401
 	 *                                     status.
-	 * 
+	 *
 	 * @throws IOException                 the param exception if it does not
 	 *                                     contain a 401 status.
 	 */
@@ -223,9 +299,9 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 
 	/**
 	 * Decide whether to display the message returned by the REST server.
-	 * 
+	 *
 	 * @param serverMessage The server message.
-	 * 
+	 *
 	 * @return <code>true</code> if we should display the server message.
 	 */
 	private boolean shouldDisplayServerMessage(String serverMessage) {
@@ -464,10 +540,10 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 
 	/**
 	 * Read the bytes from the given connection.
-	 * 
+	 *
 	 * @param connection The URL connection.
 	 * @return The bytes read.
-	 * 
+	 *
 	 * @throws IOException Any exception caught when reading from the URL.
 	 */
 	private byte[] readConnectionBytes(URLConnection connection) throws IOException {
@@ -518,9 +594,9 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 
 	/**
 	 * Return the path of the file referred to by the given request URL.
-	 * 
+	 *
 	 * @param requestURL The request URL.
-	 * 
+	 *
 	 * @return The file URL.
 	 */
 	private static String getFilePath(URL requestURL) {
@@ -537,9 +613,9 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 	/**
 	 * Return the file URL referred to by the given request URL. It is a query
 	 * parameter with name "url".
-	 * 
+	 *
 	 * @param requestURL The request URL.
-	 * 
+	 *
 	 * @return The file URL.
 	 */
 	@VisibleForTesting
