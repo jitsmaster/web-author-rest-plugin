@@ -1,0 +1,1 @@
+(function(){var msgs={Server_URL:{en_US:"Server URL",de_DE:"Server-URL",fr_FR:"URL du serveur",ja_JP:"サーバー URL"},INVALID_URL_:{en_US:"Invalid URL",de_DE:"Ungültige URL",fr_FR:"URL invalide",ja_JP:"不正なURL",nl_NL:"Ongeldige URL"}};sync.Translation.addTranslations(msgs);})();
