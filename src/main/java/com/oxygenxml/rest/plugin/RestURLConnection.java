@@ -8,17 +8,15 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.file.Paths;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import javax.net.ssl.HttpsURLConnection;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpStatus;
@@ -44,7 +42,6 @@ import ro.sync.ecss.extensions.api.webapp.plugin.UserActionRequiredException;
 import ro.sync.exml.plugin.urlstreamhandler.CacheableUrlConnection;
 import ro.sync.exml.workspace.api.PluginResourceBundle;
 import ro.sync.exml.workspace.api.PluginWorkspaceProvider;
-import ro.sync.exml.workspace.api.options.WSOptionsStorage;
 import ro.sync.net.protocol.FolderEntryDescriptor;
 import ro.sync.net.protocol.http.HttpExceptionWithDetails;
 import ro.sync.basic.util.URLUtil;
@@ -97,6 +94,8 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 	 */
 	private String cmsBase;
 
+	private String xsrfToken;
+
 	/**
 	 * Constructor method for the URLConnection wrapper.
 	 *
@@ -110,7 +109,30 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 		this.contextId = contextId;
 
 		cmsBase = RestURLStreamHandler.getServerUrl();
-		addHeaders(this, this.contextId);
+
+		Map<String, String> serverHeaders = credentialsMap.getIfPresent(this.contextId);
+		if (serverHeaders != null) {
+			String cookieHeader = serverHeaders.get("Cookie");
+			if (cookieHeader != null) {
+				String[] cookies = cookieHeader.split(";");
+				for (String cookie : cookies) {
+					cookie = cookie.trim();
+					if (cookie.startsWith("XSRF-TOKEN=")) {
+						String encodedValue = cookie.substring("XSRF-TOKEN=".length());
+
+						try {
+							this.xsrfToken = URLDecoder.decode(encodedValue, "UTF-8");
+						} catch (UnsupportedEncodingException e) {
+							throw new RuntimeException(e);
+						}
+
+						break;
+					}
+				}
+			}
+		}
+
+		addHeaders(this, this.contextId, xsrfToken);
 	}
 
 	@Override
@@ -167,7 +189,7 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 
 			HttpURLConnection connection = (HttpURLConnection) new URL(getDtdEntContentPath(path))
 					.openConnection();
-			addHeaders(connection, contextId);
+			addHeaders(connection, contextId, xsrfToken);
 
 			strm = connection.getInputStream();
 			try {
@@ -189,7 +211,7 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 		// now hit the oauth auth code url, it is get
 		URL dtdUrl = new URL(cmsBase + "automated/OxygenApi/GetDtdEntContent?" + sb.toString());
 		HttpURLConnection connection = (HttpURLConnection) dtdUrl.openConnection();
-		addHeaders(connection, contextId);
+		addHeaders(connection, contextId, xsrfToken);
 
 		return getResponseObject(connection, DtdModelWithContent[].class);
 	}
@@ -197,7 +219,7 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 	public EnvironmentModel getEnvironment() throws MalformedURLException, ProtocolException, IOException {
 		URL environmentUrl = new URL(cmsBase + "/automated/OxygenApi/GetEnvironment");
 		HttpURLConnection connection = (HttpURLConnection) environmentUrl.openConnection();
-		addHeaders(connection, contextId);
+		addHeaders(connection, contextId, xsrfToken);
 
 		return getResponseObject(connection, EnvironmentModel.class);
 	}
@@ -324,7 +346,7 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 	 * Adds credentials associated with the given user context to this rest url
 	 * connection.
 	 */
-	public static void addHeaders(URLConnection urlConnection, String contextId) {
+	public static void addHeaders(URLConnection urlConnection, String contextId, String xsrfToken) {
 		try {
 			if (accessToken == null || accessToken.getRefreshTokenExpireTime().isBefore(LocalDateTime.now())) {
 				String authCode = getAuthorziationCode();
@@ -337,14 +359,24 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 			logger.warn(e.getMessage() + "\r\n" + e.getStackTrace());
 		}
 
-		// PrintStream os = new PrintStream(codeCon.getOutputStream());
-		// os.print(content);
-		// os.close();
-
 		// This header is set in order to allow CMS's to prevent CSRF attacks.
 		// An attacker can create a form to send a post requests to a rest end-point but
 		// won't be able to set this header.
 		urlConnection.addRequestProperty(CSRF_HEADER, "RC");
+
+		try {
+			URL serverUrl = new URL(RestURLStreamHandler.getServerUrl());
+			String origin = serverUrl.getProtocol() + "://" + serverUrl.getHost()
+					+ (serverUrl.getPort() != -1 ? ":" + serverUrl.getPort() : "");
+			urlConnection.addRequestProperty("Origin", origin);
+			urlConnection.addRequestProperty("Referer", origin + "/");
+		} catch (MalformedURLException e) {
+			logger.warn("Could not set Origin/Referer headers: " + e.getMessage());
+		}
+
+		if (xsrfToken != null) {
+			urlConnection.addRequestProperty("X-XSRF-TOKEN", xsrfToken);
+		}
 
 		// set bearer token
 		try {
@@ -369,7 +401,7 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 				urlConnection.addRequestProperty(header, headerValue);
 			}
 		}
-	}
+	}	
 
 	private static String getBaseUrl(URL serverUrl) {
 
@@ -489,7 +521,7 @@ public class RestURLConnection extends FilterURLConnection implements CacheableU
 		connection = listFolderURL.openConnection();
 		connection.addRequestProperty("Accept", MediaType.JSON_UTF_8.toString());
 		// Adding headers to the folder listing connection.
-		addHeaders(connection, this.contextId);
+		addHeaders(connection, this.contextId, this.xsrfToken);
 		connection.connect();
 
 		// Read the server response in a buffer in order to be able to print it for
